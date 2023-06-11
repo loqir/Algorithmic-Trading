@@ -1,0 +1,668 @@
+# PORTFOLIO FINANCE REPORT
+<center> 
+# BT2201 Finance Assignment 
+\n 
+## Group 37
+### Members:
+### Yeo Xue Ling Andrea (A0239291Y)
+### Jacky Lu Jiaxin (A0238947L)
+### Loh Yang Xian (A0234433M)
+### Ng Chek Khau (A0234465A)
+### Tan Chong Ren (A0234511U)
+</center>
+\newpage
+
+
+
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(readxl)
+library(knitr)
+library(ggplot2)
+library(tidyr)
+library(fPortfolio)
+library(TTR)
+library(timeSeries)
+library(EnvStats)
+library(PerformanceAnalytics)
+library(PortfolioAnalytics)
+library(plotly)
+library(kableExtra)
+
+ETFxReturns <- read_excel("C:/Users/ngche/Downloads/ETFfxReturns (2).xlsx", 
+    sheet = "Returns")
+
+
+ETFfxStatic <- read_excel("C:/Users/ngche/Downloads/ETFfxReturns (2).xlsx", 
+    sheet = "Static")
+
+
+ETFxFX <- read_excel("C:/Users/ngche/Downloads/ETFfxReturns (2).xlsx", 
+    sheet = "FX")
+
+HARDCODEXCEL <- read_excel("C:/Users/ngche/Downloads/HARDCODEXCEL.xlsx")
+
+
+
+
+
+```
+This report aims to provide potential investors with 3 portfolio options according to their risk appetite. We ran a thorough analysis of various ETF returns over the past 20 years and manipulated the data accordingly. We then performed regression with Fama French Models to derive expected returns for each ETF followed by calculating the weights for the various portfolios. 
+
+**The allocation for each portfolio is rebalanced at the start of every year through the Portfolio Analytics package so as to maintain the same optimal portfolio weights despite price movements in each asset so to as maximise risk-adjusted returns. Backtesting demonstrates that this strategy yields higher returns compared to portfolios that are not rebalanced. As such, our portfolio returns are calculated with the consideration of rebalancing.**
+
+**Twenty year annualised change in USDJPY**
+
+```{r filter out rows and find currency change, echo = FALSE}
+
+#filtering out 2001 and 2022 for the USDJPY rates and getting their cumulative product of change to get geometric average of change
+withouttimefx <- select(ETFxFX, -x)
+
+
+withouttimefx <- withouttimefx + 1
+
+withouttimefxfilteredyear <- withouttimefx[67:5285,] # filtering out year 2001 and 2022 due to incomplete data
+
+
+USDJPY <- withouttimefxfilteredyear[6] #getting USDJPY COLUMNS
+
+twentyyearUSDJPY <- apply(USDJPY,2,prod)
+
+annualisedUSDJPYCHANGE<- twentyyearUSDJPY**(1/20) # ANNUALISED 20 YEAR USDJPY CHANGE
+
+kable(annualisedUSDJPYCHANGE)
+
+#cleaning data for returns
+withouttimeRETURNS <- select(ETFxReturns, -x)
+withouttimeRETURNS <- withouttimeRETURNS + 1
+
+
+withouttimeRETURNSfilteredyear <- withouttimeRETURNS[67:5285,] # filtering out year 2001 and 2022 due to incomplete data
+```
+
+```{r RETURNS MATRIX ANNUAL, echo = FALSE}
+
+#getting yearly returns for each ETF
+
+
+withouttimeRETURNSfilteredyear$year = strftime(ETFxReturns[67:5285,]$x, "%Y")
+
+
+longform <- gather(withouttimeRETURNSfilteredyear, "security", "price", -year)
+
+
+longformgroupby <- longform %>% group_by(year,security) %>% mutate(test = prod(price))
+
+
+
+longformgroupbynoprice = select(longformgroupby, -price)
+distinct = distinct(longformgroupbynoprice)
+
+
+distinctspread <- spread(distinct,security,test)
+
+
+ANNUALRETURNS <- distinctspread[,2:19]
+
+ANNUALRETURNS[3:18] <- ANNUALRETURNS[3:18]*(annualisedUSDJPYCHANGE)
+
+ANNUALRETURNS = ANNUALRETURNS - 1
+
+View(ANNUALRETURNS)
+
+
+
+RISKFREERATE = prod(ANNUALRETURNS[8])**(1/20) - 1
+
+ANNUALRETURNSnomktrf <- select(ANNUALRETURNS, -mkt,-rf)
+
+
+ANNUALRETURNSnomktrf[3:16] = ANNUALRETURNSnomktrf[3:16] * annualisedUSDJPYCHANGE
+
+
+ANNUALRETURNSnomktrf = ANNUALRETURNSnomktrf - 1
+
+
+
+MRP = ANNUALRETURNS[7] - ANNUALRETURNS[8]
+
+
+
+```
+
+```{r COV MATRIX, echo = FALSE}
+
+
+
+# getting covariance matrix
+
+covmatrix <- cov(ANNUALRETURNSnomktrf)
+
+
+
+#kable(covmatrix)
+
+
+```
+
+```{r GEOMETRIC AVERAGE, echo = FALSE}
+#getting cumulative product of returns to get geometric average
+withouttimeRETURNSfilteredyear<- select(withouttimeRETURNSfilteredyear, -year)
+
+twentyyearreturns <- apply(withouttimeRETURNSfilteredyear,2,prod)
+
+
+equityannualisedreturns<- twentyyearreturns**(1/20)
+
+
+#ACCOUNTING FOR USDJPY FOR JAPANESE EQUITIES
+equityannualisedreturns[3:7] = equityannualisedreturns[3:7]  * annualisedUSDJPYCHANGE
+equityannualisedreturns[9:13] = equityannualisedreturns[9:13] * annualisedUSDJPYCHANGE
+equityannualisedreturns[15:18] = equityannualisedreturns[15:18] * annualisedUSDJPYCHANGE
+
+
+Annualised_20_Year_Rate = equityannualisedreturns
+
+
+
+
+ANNUALISED_20_YEAR_RF <- (Annualised_20_Year_Rate - 1)[2]
+
+returnstable <- Annualised_20_Year_Rate - 1
+
+returnstable <- as.matrix(returnstable)
+
+colnames(returnstable) <- "Annualised 20 year returns"
+
+
+
+#kable(returnstable)
+
+```
+### **20 YEAR ANNUALISED RETURNS WITH CORE CHARACTERISTICS** ###
+
+```{r GEOMTRIC AVERAGE WITH CHARACTERISTICS, echo = FALSE}
+
+
+
+
+`Annualised 20 Year Returns (%)` <- (Annualised_20_Year_Rate[3:18] - 1) * 100
+`Annualised 20 Year Returns (%)` <- round(`Annualised 20 Year Returns (%)`,2)
+
+
+
+BENCHMARK = ETFfxStatic[5]
+Fees_In_Percentage= ETFfxStatic[7]
+BidAsk = ETFfxStatic[10]/ ETFfxStatic[11]
+
+names(BENCHMARK) <- "Benchmark"
+names(Fees_In_Percentage) <- "Fees (%)"
+names(BidAsk) <- "B/A Spread (Proxy for Liquidity)"
+
+
+
+
+AssetClass <- c("US Bond Market", "US Inflation Protected Bonds", "US Corporate Bonds", "Global Bond Market", "Emerging Market Bonds", "Japanese Market Equity", "US Large Cap Growth Equities", "US Mid Cap Equity", "Global Small Cap excluding US Equity", "European Market Equity", "Emerging Markets Equity", "Japanese Real Estate", "US Real Estate", "Global Real Estate excluding US", "Gold", "Commodity Futures")
+
+names(AssetClass) <- "AssetClass"
+
+table = cbind(AssetClass, BENCHMARK,`Annualised 20 Year Returns (%)`,Fees_In_Percentage,BidAsk)
+
+
+
+kable(table) %>% kable_styling(font_size = 10)
+
+
+
+```
+\newpage
+### **TIME SERIES RETURNS OF SECURITIES WITH MARKET IN BLACK** ###
+```{r ETF PLOT, echo = FALSE}
+
+#plotting returns for all ETFs, mkt and Rf
+
+a = withouttimeRETURNS
+
+
+CUMPROD = data.frame(matrix(ncol = 0, nrow = 5340))
+
+
+
+
+
+
+
+date = ETFxReturns$x
+
+d = cbind(date, CUMPROD,cumprod(a[1]),cumprod(a[2]),cumprod(a[3]),cumprod(a[4]),cumprod(a[5]),cumprod(a[6]),cumprod(a[7]),cumprod(a[8]),cumprod(a[9]),cumprod(a[10]),cumprod(a[11]),cumprod(a[12]),cumprod(a[13]),cumprod(a[14]),cumprod(a[15]),cumprod(a[16]),cumprod(a[17]),cumprod(a[18]))
+
+
+
+
+#View(filter(abc, security!="mkt"))
+
+#abc <- gather(d, "security", "price", -date) %>% mutate(black= if_else(security=="mkt", 5, 0.1))
+#View(abc)
+#ggplot() +
+#geom_line(data=filter(abc, security != "mkt") ,aes(y=price, colour=security, x=date, size=0.1)) +
+#geom_line(data=filter(abc, security == "mkt") ,aes(y=price, colour="black", x=date, size=0.5))
+
+colors = rainbow(18)
+
+ggplot(d, aes(x= date)) + 
+geom_line(aes(y = mkt, colour = 'mkt'), size = 1.5) + 
+geom_line(aes(y = rf, colour = 'rf'), size = .01) +
+geom_line(aes(y = `AGG US Equity`, colour = 'AGG'), size = .01) +
+geom_line(aes(y = `SCHP US Equity`, colour = 'SCHP'), size = .01) +
+geom_line(aes(y = `VCSH US Equity`, colour = 'VCSH'), size = .01) +
+geom_line(aes(y = `BNDX US Equity`, colour = 'BNDX'), size = .01) +
+geom_line(aes(y = `VWOB US Equity`, colour = 'VWOB'), size = .01) +
+geom_line(aes(y = `1306 JT Equity`, colour = '1306JT'), size = .01) +
+geom_line(aes(y = `VOO US Equity`, colour = 'VOO'), size = .01) + 
+geom_line(aes(y = `VO US Equity`, colour = 'VO'), size = .01) +
+geom_line(aes(y = `VSS US Equity`, colour = 'VSS'), size = .01) +
+geom_line(aes(y = `VGK US Equity`, colour = 'VGK'), size = .01) +
+geom_line(aes(y = `VWO US Equity`, colour = 'VWO'), size = .01) +
+geom_line(aes(y = `1343 JT Equity`, colour = '1343JT'), size = .01) +
+geom_line(aes(y = `VNQ US Equity`, colour = 'VNQ'), size = .01) +
+geom_line(aes(y = `VNQI US Equity`, colour = 'VNQI'), size = .01) +
+geom_line(aes(y = `IAU US Equity`, colour = 'IAU'), size = .01) +
+geom_line(aes(y = `BCI US Equity`, colour = 'BCI'), size = .01) +
+  
+scale_color_manual(name ="Legend", values = c( 'mkt' = 'black', 'rf' = colors[2], 'AGG' = colors[3], 'SCHP' = colors[4], 'VCSH' = colors[5], 'BNDX' = colors[6], 'VWOB' = colors[7], '1306JT' = colors[8], 'VOO' = colors[9], 'VO' = colors[10], 'VSS' = colors[11], 'VGK' = colors[12], 'VWO' = colors[13], '1343JT' = colors[14], 'VNQ' = colors[15], 'VNQI' = colors[16], 'IAU'= colors[17], 'BCI' = colors[18])) + labs(y = "Factor of Returns", x = "Year")
+
+
+
+
+
+
+
+```
+\n
+
+### **muCAPM OF ETFS USING REGRESSION WITH FAMA FRENCH 5 FACTOR MODEL** ###
+```{r FF5F, echo = FALSE}
+FFDF <- select(HARDCODEXCEL, -...1)
+ANNUALRETURNS = ANNUALRETURNS -1
+
+
+SMBSTAR <- as.vector(unlist(FFDF[2]/100))
+HMLSTAR <- as.vector(unlist(FFDF[3]/100))
+RMWSTAR <- as.vector(unlist(FFDF[4]/100))
+CMASTAR <- as.vector(unlist(FFDF[5]/100))
+
+SMBSTARMEAN <- mean(SMBSTAR)
+HMLSTARMEAN <- mean(HMLSTAR)
+RMWSTARMEAN <- mean(RMWSTAR)
+CMASTARMEAN <- mean(CMASTAR)
+
+riskpremium <- ANNUALRETURNSnomktrf[1] - (ANNUALRETURNS)[8]
+
+riskpremium_vec <- as.vector(unlist(riskpremium))
+MRP_vec <- as.vector(unlist(MRP))
+
+MRPMEAN <- mean(MRP_vec)
+
+
+
+
+model <- lm(riskpremium_vec ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+RISKFREECOL = ANNUALRETURNS[8]
+
+riskpremium2 <- ANNUALRETURNSnomktrf[2] - RISKFREECOL
+model2 <- lm(as.vector(unlist(riskpremium2)) ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+riskpremium3 <- ANNUALRETURNSnomktrf[3] - RISKFREECOL
+
+model3 <- lm(as.vector(unlist(riskpremium3)) ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+riskpremium4 <- ANNUALRETURNSnomktrf[4] - RISKFREECOL
+model4 <- lm(as.vector(unlist(riskpremium4)) ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+riskpremium5 <- ANNUALRETURNSnomktrf[5] - RISKFREECOL
+model5 <- lm(as.vector(unlist(riskpremium5)) ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+riskpremium6 <- ANNUALRETURNSnomktrf[6] - RISKFREECOL
+model6 <- lm(as.vector(unlist(riskpremium6)) ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+riskpremium7 <- ANNUALRETURNSnomktrf[7] - RISKFREECOL
+model7 <- lm(as.vector(unlist(riskpremium7)) ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+riskpremium8 <- ANNUALRETURNSnomktrf[8] - RISKFREECOL
+model8 <- lm(as.vector(unlist(riskpremium8)) ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+riskpremium9 <- ANNUALRETURNSnomktrf[9] - RISKFREECOL
+model9 <- lm(as.vector(unlist(riskpremium9)) ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+riskpremium10 <- ANNUALRETURNSnomktrf[10] - RISKFREECOL
+model10 <- lm(as.vector(unlist(riskpremium10)) ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+riskpremium11 <- ANNUALRETURNSnomktrf[11] - RISKFREECOL
+model11 <- lm(as.vector(unlist(riskpremium11)) ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+riskpremium12 <- ANNUALRETURNSnomktrf[12] - RISKFREECOL
+model12 <- lm(as.vector(unlist(riskpremium12)) ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+riskpremium13 <- ANNUALRETURNSnomktrf[13] - RISKFREECOL
+model13 <- lm(as.vector(unlist(riskpremium13)) ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+riskpremium14 <- ANNUALRETURNSnomktrf[14] - RISKFREECOL
+model14 <- lm(as.vector(unlist(riskpremium14)) ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+riskpremium15 <- ANNUALRETURNSnomktrf[15] - RISKFREECOL
+model15 <- lm(as.vector(unlist(riskpremium15)) ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+riskpremium16 <- ANNUALRETURNSnomktrf[16] - RISKFREECOL
+model16 <- lm(as.vector(unlist(riskpremium16)) ~ MRP_vec+SMBSTAR+HMLSTAR+RMWSTAR+CMASTAR)
+
+
+
+inputs = data.frame(MRP_vec = MRPMEAN, SMBSTAR = SMBSTARMEAN, HMLSTAR = HMLSTARMEAN, RMWSTAR = RMWSTARMEAN, CMASTAR = CMASTARMEAN)
+
+JT1306 = predict(model, inputs)
+
+JT1343 = predict(model2, inputs)
+
+AGGUS = predict(model3, inputs)
+
+BCIUS = predict(model4, inputs)
+
+BNDXUS = predict(model5, inputs)
+
+IAUUS = predict(model6, inputs)
+
+SCHPUS = predict(model7, inputs)
+
+VCSHUS = predict(model8, inputs)
+
+VGKUS = predict(model9, inputs)
+
+VNQUS = predict(model10, inputs)
+
+VNQIUS = predict(model11, inputs)
+
+VOUS = predict(model12, inputs)
+
+VOOUS = predict(model13, inputs)
+
+VSSUS = predict(model14, inputs)
+
+VWOUS = predict(model15, inputs)
+
+VWOBUS = predict(model16, inputs)
+
+MUCAPM = data.frame(JT1306, JT1343, AGGUS, BCIUS, BNDXUS, IAUUS, SCHPUS, VCSHUS, VGKUS, VNQUS, VNQIUS, VOUS, VOOUS, VSSUS, VWOUS, VWOBUS)
+
+
+ANNUALISEDRISKFREERATE = prod(ANNUALRETURNS[8] + 2)**(1/20) - 1
+
+MUCAPM = MUCAPM + ANNUALISEDRISKFREERATE
+
+MUCAPMT = t(MUCAPM)
+
+colnames(MUCAPMT) <- "MU CAPM (%)"
+kable(round(MUCAPMT * 100,2)) %>% kable_styling(font_size = 10)
+
+```
+### **EFFICIENT FRONTIER PLOT WITH RED POINT AS GMVP AND BLUE TRIANGLE AS TANGENCY POINT** ###
+
+```{r WEIGHTS, echo = FALSE}
+ANNUALRETURNSnomktrf = ANNUALRETURNSnomktrf + 1
+
+covtEstimator <- function (x,data,spec) {
+x.mat = as.matrix(x)
+list(mu=t(MUCAPM),Sigma=covmatrix)
+}
+tMucapm <- t(MUCAPM)
+
+
+
+# Calculate Efficient Frontier
+defaultSpec <- portfolioSpec()
+setEstimator(defaultSpec) <- 'covtEstimator'
+defaultSpec <- `setRiskFreeRate<-`(defaultSpec,ANNUALISEDRISKFREERATE)
+
+
+
+#To insert the correct time-series 
+#ANNUALRETURNSnomktrf
+
+#To use the appropriate risk-free rate
+#ANNUALISEDRISKFREERATE
+
+#To plot efficient frontier and the diff weightages
+efficient.frontier = portfolioFrontier(
+  as.timeSeries(ANNUALRETURNSnomktrf), defaultSpec, ANNUALISEDRISKFREERATE,
+  constraints = "LongOnly")
+
+#Plots the efficient frontier 
+plot(efficient.frontier, c(1,2,3,4,5))
+
+
+
+#To get tangency portfolio (tangency portfolio weights)
+tangentPortfolio <- tangencyPortfolio(as.timeSeries(ANNUALRETURNSnomktrf), defaultSpec,constraints = "LongOnly")
+tangentWeights <- getWeights(tangentPortfolio)
+
+
+
+
+
+
+#To get min variance portfolio (Lowest risk portfolio weights)
+
+MediumRiskWeights = getWeights(efficient.frontier)[30,]
+
+names(MediumRiskWeights) <- c("1306 JT Equity", "1343 JT Equity	", "AGG US Equity", "BCI US Equity", "BNDX US Equity", "IAU US Equity", "SCHP US Equity", "VCSH US Equity", "VGK US Equity", "VNQ US Equity", "VNQI US Equity", "VO US Equity	", "VOO US Equity", "VSS US Equity", "VWO US Equity", "VWOB US Equity")
+
+
+
+
+#To get max return portfolio (max return portfolio weights)
+
+MaxReturnWeights <- getWeights(efficient.frontier)[41,]
+names(MaxReturnWeights) <- c("1306 JT Equity", "1343 JT Equity	", "AGG US Equity", "BCI US Equity", "BNDX US Equity", "IAU US Equity", "SCHP US Equity", "VCSH US Equity", "VGK US Equity", "VNQ US Equity", "VNQI US Equity", "VO US Equity	", "VOO US Equity", "VSS US Equity", "VWO US Equity", "VWOB US Equity")
+
+
+
+
+
+```
+```{r Backtest, echo = FALSE}
+
+
+vec <- c(0,0,0,0)
+
+TWENTYYEAR <- rbind(vec,ANNUALRETURNS + 1,vec)
+
+ETFs <- cbind(TWENTYYEAR[1:6],TWENTYYEAR[9:18])
+
+rownames(ETFs) <- as.character(seq(as.Date("2002-01-01"), length.out=nrow(ETFs), by = "year"))
+
+
+BM <- TWENTYYEAR[7]
+
+rownames(BM) <- as.character(seq(as.Date("2002-01-01"), length.out=nrow(BM), by = "year"))
+marketreturns <- as.xts(BM)
+
+marketreturns <- marketreturns[1:21,]
+
+medreturn <- Return.portfolio(ETFs, weights = MediumRiskWeights, rebalance_on = "years",  value = 10000, verbose = TRUE)
+maxreturn <- Return.portfolio(ETFs, weights = MaxReturnWeights, value = 10000, rebalance_on = "years", verbose = TRUE)
+
+highestrr <- Return.portfolio(ETFs, weights = tangentWeights, value = 10000, rebalance_on = "years", verbose = TRUE)
+
+medreturn$returns <- medreturn$returns[1:21]
+highestrr$returns <- highestrr$returns[1:21]
+maxreturn$returns <-maxreturn$returns[1:21]
+
+
+colnames(marketreturns) <- "Market Portfolio"
+colnames(medreturn$returns) <- "Medium-Risk Portfolio"
+colnames(maxreturn$returns) <- "Max Return Portfolio"
+colnames(highestrr$returns) <- "Highest Risk-Reward Portfolio"
+
+
+temp <- as.xts(BM)
+equal <- Return.portfolio(temp,  value = 10000, verbose = TRUE)
+totalvalue <- as.data.frame(rowSums(maxreturn$EOP.Value))[1:21,]
+totalvalue1 <- as.data.frame(rowSums(medreturn$EOP.Value))[1:21,]
+totalvalue2 <- as.data.frame(rowSums(highestrr$EOP.Value))[1:21,]
+totalvalue3 <- as.data.frame(rowSums(equal$EOP.Value))[1:21,]
+
+
+
+
+
+totalvalue = cbind(totalvalue,totalvalue1,totalvalue2,round(totalvalue3,2))
+rownames(totalvalue) <- as.character(seq(as.Date("2002-01-01"), length.out=nrow(totalvalue), by = "year"))
+
+
+rownames(totalvalue) <- strftime(rownames(totalvalue), "%Y")
+
+colnames(totalvalue) <- c("Max Return Portfolio", "Medium-Risk Portfolio", "Highest Risk-Reward Portfolio", "Market")
+
+
+```
+\newpage
+### **PORTFOLIO 1: HIGHEST RISK-REWARD PORTFOLIO WITH ANNUALISED RETURN OF 4.01%** ###
+
+#### **RISK LEVEL : LOW** ####
+
+\n
+
+This portfolio optimises the risk to return ratio.  This portfolio is best suited for those with cash holdings that seek to beat inflation but still achieve a higher return than risk free assets while minimizing their risk. To achieve this, the portfolio invests primarily in Global Market Bonds, US Market Bonds as well as US and Japanese Equity. 
+
+```{r highestrr, echo = FALSE}
+
+
+barplot(round(tangentWeights * 100,2), xlab = "Weights(%)",las = 1, xlim = c(0,70), main = "Holdings of Highest Risk-Reward Portfolio", col = rainbow(16), horiz = TRUE, cex.names = 0.5)
+
+kable(round(tangentWeights * 100,2), col.names = "Weights(%)", caption = "Holdings of Highest Risk-Reward Portfolio") %>% kable_styling(font_size = 10)
+
+rets2_df <- cbind(highestrr$returns, marketreturns)
+
+charts.PerformanceSummary(rets2_df,  Rf = Rf, geometric = TRUE, wealth.index = TRUE, colorset=rich6equal, lwd=2, plot.engine = "default", main="Performance of Highest-Risk Reward Portfolio VS Market")
+```
+
+\newpage
+### **PORTFOLIO 2: MEDIUM-RISK PORTFOLIO WITH ANNUALISED RETURN OF 7.42%** ###
+
+#### **RISK LEVEL : MEDIUM** ####
+
+\n
+
+
+The investment objective of this portfolio is to achieve greater returns with lower risk as compared to the market’s performance. This portfolio is the most suited for those who are seeking above average returns with medium risk. To achieve this, the portfolio will invest in the Japanese  and US Real Estate, Large Cap Growth Equities, Gold and US Bond Market.
+
+```{r medreturn, echo = FALSE}
+
+
+barplot(round(MediumRiskWeights * 100,2), xlab = "Weights(%)",las = 1, xlim = c(0,60), main = "Holdings of Medium-Risk Portfolio", col = rainbow(16), horiz = TRUE, cex.names = 0.5)
+
+
+kable(round(MediumRiskWeights * 100,2), col.names = "Weights(%)", caption = "Holdings of Medium-Risk  Portfolio") %>% kable_styling(font_size = 10)
+
+
+rets3_df <- cbind(medreturn$returns, marketreturns)
+
+charts.PerformanceSummary(rets3_df,  Rf = Rf, geometric = TRUE, wealth.index = TRUE, colorset=rich6equal, lwd=2, plot.engine = "default", main="Peformance of Medium-Risk Portfolio VS Market")
+
+```
+
+\newpage
+### **PORTFOLIO 3: MAX RETURN PORTFOLIO WITH ANNUALISED RETURN OF 10.05%** ###
+
+\n
+
+#### **RISK LEVEL: HIGH** ####
+
+\n
+
+The investment objective of this portfolio is to produce a high overall total return. This portfolio is the most suited for those with the highest risk appetite. To achieve this, the portfolio will invest in the Japanese and US Real Estate, Gold, US Mid Cap Equity as well as Large Cap Growth Equities Market. This portfolio guarantees a higher return as compared to the other two portfolios suggested and also outperforms the market portfolio. 
+
+```{r MAXRETURNS, echo = FALSE}
+barplot(round(MaxReturnWeights * 100,2), xlab = "Weights(%)",las = 1, xlim = c(0,60), main = "Holdings of Maximum Returns High Risk Portfolio", col = rainbow(16), horiz = TRUE, cex.names = 0.5)
+
+
+
+kable(round(MaxReturnWeights * 100,2), col.names = "Weights(%)", caption = "Holdings of Maximum Returns High Risk Portfolio") %>% kable_styling(font_size = 10)
+
+
+
+
+rets1_df <- cbind(maxreturn$returns, marketreturns)
+
+charts.PerformanceSummary(rets1_df, Rf = Rf, geometric = TRUE, wealth.index = TRUE, main="Performance of Max Return Portfolio VS Market", colorset=rich6equal, lwd=2, plot.engine = "default")
+
+
+
+rets_df <- cbind(maxreturn$returns, medreturn$returns, highestrr$returns, marketreturns)
+
+charts.PerformanceSummary(rets_df, Rf = Rf, geometric = TRUE, main="Performance of  All Portfolios against Market",wealth.index = TRUE,   colorset=rich6equal, lwd=2, plot.engine = "default")
+```
+
+\newpage
+### **Growth of initial 10,000 YEN capital over time for portfolios against market** ###
+
+```{r e23q, echo = FALSE}
+
+
+kable(totalvalue) %>% kable_styling(font_size = 10)
+```
+
+\newpage
+### **ALL PORTFOLIOS HAVE HIGHER RETURN-RISK RATIO(MEASURED BY GRADIENT) COMPARED TO THE MARKET** ###
+
+
+```{r Backtest2, echo = FALSE}
+
+
+chart.RiskReturnScatter(
+  rets_df,
+  Rf = 0,
+  main = "Annualized Return and Risk",
+  add.names = TRUE,
+  xlab = "Annualized Risk",
+  ylab = "Annualized Return",
+  method = "calc",
+  geometric = TRUE,
+  scale = NA,
+  add.sharpe = NA,
+  add.boxplots = FALSE,
+  colorset = 1,
+  symbolset = 1,
+  element.color = "darkgray",
+  legend.loc = NULL,
+  xlim = c(0,0.2),
+  ylim = c(0,0.2),
+  cex.legend = 1,
+  cex.axis = 0.8,
+  cex.main = 1,
+  cex.lab = 1
+)
+
+```
+
+Some other Alternative ETFs we considered but did not have the data for.
+
+1) GLDM (SPDR Gold MiniShares Trust) [to replace IAU (iShares Gold Trust)]
+GLDM has a lower expense ratio (0.18%) compared to IAU (0.25%). And among the other Gold ETFS that has an expense ratio of around 0.18%, GLDM has the higher AUM.
+
+2) SCHH (Schwab US REIT ETF) [to replace VNQ Vanguard Real Estate ETF]
+SCHH has a lower expense ratio of 0.07% compared to VNQ (0.12%)
+There is however some underperformance by SCHH compared to the benchmark which requires further DD to be done.
+
+3) BITO ProShares Bitcoin Strategy ETF
+BITO was released in 2021 and tracks the performance of Bitcoin via BTC future contracts. Although it only tracks Bitcoin, Bitcoin is the largest cryptocurrency in this asset class. However, more data is required before we can perform a detailed optimisation and come to an effective conclusion.
+
+
