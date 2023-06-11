@@ -1,0 +1,3 @@
+This project applied the idea of mean reversion pairs trading to attempt algorithmic trading.
+Using past price history of securities, PCA decomposition was used to decompose different components of the securities that we cannot interpret apart from their average return and volatility. After which, DBSCAN clustering was used to determine securities that had high levels of similarity in these components. From the different groups, securities were passed through a cointegration function to filter out cointegrated pairs from which pairs trading was conducted. When the difference in price between 2 cointegrated securities exceeded a certain threshold of standard deviation, the pair will be longed/shorted depending on the direction of movement.
+
